@@ -1,3 +1,4 @@
+import dash_table
 import pandas as pd
 import requests
 from dash import Dash, html, dcc
@@ -30,7 +31,9 @@ class Attribute(BaseModel):
 
 
 
-app = Dash(__name__)
+# app = Dash(__name__)
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server
 
 
@@ -65,12 +68,17 @@ def update_token(n):
 
         # Extract the token from the response
         token = token_response.json().get('token')  # replace 'token' with the correct field if different
-        return html.Div(f"Token: {token}")
+        emoji_check = u'\u2705'  # ✅
+        return html.Div(f"Token: {emoji_check}")
 
     return ''
 
 @app.callback(Output('data-container', 'children'), [Input('get-data-button', 'n_clicks')])
 def get_data(n):
+    total = 0
+    tmpJobs = []
+    well_operator =''
+    well_contractor = ''
     if n and n > 0:
         if token is None:
             return html.Div("No token available. Please generate a token first.")
@@ -79,13 +87,36 @@ def get_data(n):
             # Make the data request with the token
             url = "https://data.welldata.net/api/v1/jobs?jobStatus=ActiveJobs&includeCapabilities=false&sort=id%20asc&take=1000&skip=0&total=true"
             data_response = requests.get(url, headers={'Token': token})
-
+            total = data_response.json()['total']
+            values = data_response.json()['jobs']
             data_response.raise_for_status()  # raise exception if the request failed
+            for w in values:
+                # tmpJobs.append(w['id'])
+                # tmpJobs.append(f"{w['assetInfoList'][0]['owner']} {w['assetInfoList'][0]['name']}")  # Rig Name
+                # # set operator and contractor
+                # tmpJobs.append(w['assetInfoList'][0]['owner'])  # Contractor
+                # tmpJobs.append(w['siteInfoList'][0]['owner'])  # Operator
+                # tmpJobs.append(w['startDate'])
+                # tmpJobs.append(w['firstDataDate'])
+                # tmpJobs.append(w['lastDataDate'])
+
+                tmpJobs.append([w['id'],f"{w['assetInfoList'][0]['owner']} {w['assetInfoList'][0]['name']}",w['assetInfoList'][0]['owner'],w['siteInfoList'][0]['owner'],w['startDate'],w['firstDataDate'],w['lastDataDate']])
+            header = ['Job Id','Rig','Contractor', 'Operator','Start Date', 'First Data Date', 'Last Data Date']
+            df = pd.DataFrame(tmpJobs)
+            df.columns = header
+            app.layout = html.Div([
+                dash_table.DataTable(
+                    id='AllActiveJobsTable',
+                    columns=[{"name": str(i), "id": str(i)} for i in df.columns],
+                    data=df.to_dict('records'),
+                )
+            ])
+
 
         except requests.exceptions.RequestException as err:
             return html.Div(f"Error occurred while getting data: {err}")
 
-        return html.Div(str(data_response.json()))
+        return app.layout
 
     return ''
 
@@ -149,6 +180,15 @@ def get_comments3(n):
             return update_token(n)
 
         try:
+            # Getting all Jobs:
+
+
+
+
+
+
+            # Getting Report Comments
+
             # Make the data request with the token
             url = f"https://data.welldata.net/api/v1/jobs/{JobID}/reports/daily/2"
             data_response = requests.get(url, headers={'Token': token})
@@ -254,19 +294,20 @@ def process_input(n):
 
 app.layout = html.Div([
     html.Button('Update Token', id='update-token-button', n_clicks=0),
-    html.Button('Get Data', id='get-data-button', n_clicks=0),
+    html.Button('Get All Active Jobs', id='get-data-button', n_clicks=0),
     html.Button('Get Comments', id='get-comments-button', n_clicks=0),
     html.Button('Get Comments 2', id='get-comments2-button', n_clicks=0),
     html.Button('Get Comments 3', id='get-comments3-button', n_clicks=0),
+    dcc.Input(id='input-box', type='text', placeholder='Enter a value'),
+    html.Button('<-- Enter Job ID', id='process-button', n_clicks=0),
+    html.Div(id='output-value'),
+    html.Div(id='output-processed-value'),
     html.Div(id='output-container'),
     html.Div(id='data-container'),
     html.Div(id='comments-container'),
     html.Div(id='comments2-container'),
-    html.Div(id='comments3-container'),
-    dcc.Input(id='input-box', type='text', placeholder='Enter a value'),
-    html.Button('Job ID', id='process-button', n_clicks=0),
-    html.Div(id='output-value'),
-    html.Div(id='output-processed-value')
+    html.Div(id='comments3-container')
+
 ])
 
 if __name__ == "__main__":
